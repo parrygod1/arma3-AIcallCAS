@@ -1,3 +1,5 @@
+test = "";
+
 infantryGroups = [];
 airVehicles = [];
 
@@ -31,12 +33,14 @@ callCAS = {
 calcSurvivalChance = {
 	private _group = _this select 0;
 	private _targetGroup = _this select 1;
-	private _chance = 0;
 
 	private _survivalChance = 100;
-	private _unitsDiff = count units _targetGroup - count units _group;
 	private _noAmmoUnitsCount = 0;
 	private _lowHealthUnitsCount = 0;
+	private _friendGroupVehicles = 0;
+	private _enemyGroupVehicles = 0;
+	private _friendGroupMen = 0;
+	private _enemyGroupMen = 0;
 
 	{
 		if (damage _x > unitMaxDamage) then {
@@ -44,9 +48,33 @@ calcSurvivalChance = {
 		};
 		if (!(someAmmo _x)) then {
 			_noAmmoUnitsCount = _noAmmoUnitsCount + 1;
-		}
-	} forEach units _group;
+		};
 
+		if (_x isKindOf "Man") then {
+			_friendGroupMen = _friendGroupMen + 1;
+		};
+	} forEach units _group;
+	{
+		if (_x isKindOf "Tank" or _x isKindOf "Wheeled_APC_F" or _x isKindOf "IFV" or _x isKindOf "StaticWeapon") then {
+			_friendGroupVehicles = _friendGroupVehicles + 1;
+		};
+	} forEach ([_group, true] call BIS_fnc_groupVehicles);
+
+	{
+		if (_x isKindOf "Man") then {
+			_enemyGroupMen = _enemyGroupMen + 1;
+		};
+	} forEach units _targetGroup;
+	{
+		if (_x isKindOf "Tank" or _x isKindOf "Wheeled_APC_F" or _x isKindOf "IFV" or _x isKindOf "StaticWeapon") then {
+			_enemyGroupVehicles = _enemyGroupVehicles + 1;
+		};
+	} forEach ([_targetGroup, true] call BIS_fnc_groupVehicles);
+
+	private _unitsDiff = _enemyGroupMen - _friendGroupMen;
+	private _vehiclesDiff = _enemyGroupVehicles - _friendGroupVehicles;
+
+	_survivalChance = _survivalChance - (_vehiclesDiff * 30);
 	_survivalChance = _survivalChance - (_unitsDiff * 15);
 	_survivalChance = _survivalChance - (_lowHealthUnitsCount * 10);
 	_survivalChance = _survivalChance - (_noAmmoUnitsCount * 5);
@@ -77,19 +105,22 @@ casLoop = {
 				_targetGroup = group getAttackTarget (leader _group);
 			};
 
-			if (_chance < minSurvivalChance && _activeTasks < maxTasksPerUnit && _groupsDistance < maxGroupDistance && _groupDistance >= minGroupDistance) then {
+			if (_chance < minSurvivalChance && _activeTasks < maxTasksPerUnit && _groupsDistance < maxGroupDistance && _groupsDistance >= minGroupDistance) then {
 				_activeTasks = _activeTasks + 1;
 				_taskID = [_group, _targetGroup] call callCAS;
+				_group setVariable ["taskID", _taskID];
 			};
 
 			if (_activeTasks > 0 && _chance > minSurvivalChance) then {
 				_activeTasks = _activeTasks - 1;
 				[_taskID, "SUCCEEDED"] call BIS_fnc_taskSetState;
+				_group setVariable ["taskID", ""];
 			};
 
 			if (_activeTasks > 0 && _groupsDistance > maxGroupDistance) then {
 				_activeTasks = _activeTasks - 1;
 				[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
+				_group setVariable ["taskID", ""];
 			};
 
 			sleep 5;
@@ -98,9 +129,10 @@ casLoop = {
 
 	if (_activeTasks > 0 && !_isAlive) then {
 		[_taskID, "FAILED"] call BIS_fnc_taskSetState;
+		_group setVariable ["taskID", ""];
 	};
 };
-test = "";
+
 {
 	private _group = _x;
 
@@ -121,11 +153,16 @@ test = "";
 
 				if (_newMode isEqualTo "COMBAT") then {
 					_handle = [_group] spawn casLoop;
-					test = _handle;
-
 					_group setVariable ["loopHandle", _handle];
 				} else {
-					terminate (_group getVariable "loopHandle");
+					if (!(isNull (_group getVariable "loopHandle"))) then {
+						terminate (_group getVariable "loopHandle");
+
+						_taskID = _group getVariable "taskID";
+						if (!(_taskID isEqualTo "")) then {
+							[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
+						};
+					}
 				};
 			}];
 		};
