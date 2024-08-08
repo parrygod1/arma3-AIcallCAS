@@ -1,4 +1,4 @@
-#include "munitions.sqf";
+#include "CAS_maths.sqf";
 
 test = "";
 
@@ -11,27 +11,7 @@ taskIDCounter = 0;
 unitMaxDamage = 0.5;
 maxGroupDistance = 1000;
 minGroupDistance = 50;
-
-drawOnMap = {
-	params ["_callerGroup", "_targetGroup"];
-
-	// _myArrow3 = [position player, position leader _targetGroup, [1, 0, 0, 1], [1, 1/5, 5]] call BIS_fnc_drawArrow;
-
-	/*_map = findDisplay 12 displayCtrl 51;
-		_map setVariable ["_callerGroup", _callerGroup];
-		_map setVariable ["_targetGroup", _targetGroup];
-		
-		_map ctrlAddEventHandler ["Draw", {
-			_map = _this select 0;
-			_callerGroup = _map getVariable "_callerGroup";
-			
-			_map drawArrow [
-				player, 
-				_callerGroup, 
-				[0.6, 1, 0.37, 1]
-			];
-	}];*/
-};
+newTaskCooldown = 200;
 
 callCAS = {
 	_callerGroup = _this select 0;
@@ -41,6 +21,7 @@ callCAS = {
 	_pilot = driver _aircraft;
 
 	private _targetPosition = getPos leader _targetGroup;
+	private _friendlyPosition = getPos leader _callerGroup;
 
 	private _taskID = format ["CAS%1", taskIDCounter];
 	private _taskDescription = format ["CAS %1", groupId _callerGroup];
@@ -50,64 +31,49 @@ callCAS = {
 	[_pilot, _taskID, ["Provide CAS at the location", _taskDescription, _taskDescription], _taskDestination, 1, 2, true] call BIS_fnc_taskCreate;
 	[_taskID, "ASSIGNED"] call BIS_fnc_taskSetState;
 
-	[_callerGroup, _targetGroup] call drawOnMap;
+	_munitions = [_callerGroup, _targetGroup] call determineMunitions;
+	_waypoints = [_callerGroup, _targetPosition, _munitions] call calculateCASWaypoints;
+	_targetElevation = (getPosASL leader _targetGroup) select 2;
+
+	_ipPos = mapGridPosition (_waypoints select 0);
+	_egressPos = mapGridPosition (_waypoints select 2);
+
+	_distance = (_waypoints select 0) distance (_waypoints select 1);
+	_gridPosTgt = mapGridPosition _targetPosition;
+	_gridPosFriendly = mapGridPosition _friendlyPosition;
+	_heading = (_waypoints select 0) getDir (_waypoints select 1);
+
+	_dangerClose = _targetPosition distance _friendlyPosition <= 100;
+
+	hint format [
+		"IP: %1\n
+		HEADING: %2\n
+		distance: %3\n
+		TGT ELEVATION: %4\n
+		TGT DESCRIPTION: %5\n
+		TGT LOCATION: %6\n
+		MARK: %7\n
+		FRIENDLIES: %8\n
+		EGRESS: %9\n
+		REMARKS:\n
+		DANGER CLOSE: %10\n
+		ORDANANCE: %11",
+		_ipPos,
+		_heading,
+		_distance,
+		_targetElevation,
+		"NONE",
+		_gridPosTgt,
+		"NONE",
+		_gridPosFriendly,
+		_egressPos,
+		_dangerClose,
+		_munitions
+	];
+
+	[_waypoints] call drawOnMap;
 
 	_taskID;
-};
-
-calcSurvivalChance = {
-	private _group = _this select 0;
-	private _targetGroup = _this select 1;
-
-	private _survivalChance = 100;
-	private _noAmmoUnitsCount = 0;
-	private _lowHealthUnitsCount = 0;
-	private _friendGroupVehicles = 0;
-	private _enemyGroupVehicles = 0;
-	private _friendGroupMen = 0;
-	private _enemyGroupMen = 0;
-
-	{
-		if (damage _x > unitMaxDamage) then {
-			_lowHealthUnitsCount = _lowHealthUnitsCount + 1;
-		};
-		if (!(someAmmo _x)) then {
-			_noAmmoUnitsCount = _noAmmoUnitsCount + 1;
-		};
-
-		if (_x isKindOf "Man") then {
-			_friendGroupMen = _friendGroupMen + 1;
-		};
-	} forEach units _group;
-	{
-		if (_x isKindOf "Tank" or _x isKindOf "Wheeled_APC_F" or _x isKindOf "IFV" or _x isKindOf "StaticWeapon") then {
-			_friendGroupVehicles = _friendGroupVehicles + 1;
-		};
-	} forEach ([_group, true] call BIS_fnc_groupVehicles);
-
-	{
-		if (_x isKindOf "Man") then {
-			_enemyGroupMen = _enemyGroupMen + 1;
-		};
-	} forEach units _targetGroup;
-	{
-		if (_x isKindOf "Tank" or _x isKindOf "Wheeled_APC_F" or _x isKindOf "IFV" or _x isKindOf "StaticWeapon") then {
-			_enemyGroupVehicles = _enemyGroupVehicles + 1;
-		};
-	} forEach ([_targetGroup, true] call BIS_fnc_groupVehicles);
-
-	private _unitsDiff = _enemyGroupMen - _friendGroupMen;
-	private _vehiclesDiff = _enemyGroupVehicles - _friendGroupVehicles;
-
-	_survivalChance = _survivalChance - (_vehiclesDiff * 30);
-	_survivalChance = _survivalChance - (_unitsDiff * 15);
-	_survivalChance = _survivalChance - (_lowHealthUnitsCount * 10);
-	_survivalChance = _survivalChance - (_noAmmoUnitsCount * 5);
-	_survivalChance = _survivalChance max 0 min 100;
-
-	// hint format ["%1", _survivalChance];
-
-	_survivalChance;
 };
 
 casLoop = {
@@ -121,6 +87,7 @@ casLoop = {
 		_isAlive = units _group findIf {
 			alive _x
 		} > -1;
+		_lastTaskTime = _group getVariable ["timeTaskEnded", -200];
 
 		if (_isAlive) then {
 			_chance = [_group, _targetGroup] call calcSurvivalChance;
@@ -130,7 +97,11 @@ casLoop = {
 				_targetGroup = group getAttackTarget (leader _group);
 			};
 
-			if (_chance < minSurvivalChance && _activeTasks < maxTasksPerUnit && _groupsDistance < maxGroupDistance && _groupsDistance >= minGroupDistance) then {
+			if (_chance < minSurvivalChance &&
+			_activeTasks < maxTasksPerUnit &&
+			_groupsDistance < maxGroupDistance &&
+			_groupsDistance >= minGroupDistance &&
+			_lastTaskTime + newTaskCooldown <= time) then {
 				_activeTasks = _activeTasks + 1;
 				_taskID = [_group, _targetGroup] call callCAS;
 				_group setVariable ["taskID", _taskID];
@@ -140,12 +111,14 @@ casLoop = {
 				_activeTasks = _activeTasks - 1;
 				[_taskID, "SUCCEEDED"] call BIS_fnc_taskSetState;
 				_group setVariable ["taskID", ""];
+				_group setVariable ["timeTaskEnded", time];
 			};
 
 			if (_activeTasks > 0 && _groupsDistance > maxGroupDistance) then {
 				_activeTasks = _activeTasks - 1;
 				[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
 				_group setVariable ["taskID", ""];
+				_group setVariable ["timeTaskEnded", time];
 			};
 
 			sleep 5;
@@ -155,6 +128,7 @@ casLoop = {
 	if (_activeTasks > 0 && !_isAlive) then {
 		[_taskID, "FAILED"] call BIS_fnc_taskSetState;
 		_group setVariable ["taskID", ""];
+		_group setVariable ["timeTaskEnded", time];
 	};
 };
 
@@ -186,6 +160,7 @@ casLoop = {
 						_taskID = _group getVariable "taskID";
 						if (!(_taskID isEqualTo "")) then {
 							[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
+							_group setVariable ["timeTaskEnded", time];
 						};
 					}
 				};
