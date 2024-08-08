@@ -1,3 +1,5 @@
+#include "munitions.sqf";
+
 test = "";
 
 infantryGroups = [];
@@ -9,6 +11,27 @@ taskIDCounter = 0;
 unitMaxDamage = 0.5;
 maxGroupDistance = 1000;
 minGroupDistance = 50;
+
+drawOnMap = {
+	params ["_callerGroup", "_targetGroup"];
+
+	// _myArrow3 = [position player, position leader _targetGroup, [1, 0, 0, 1], [1, 1/5, 5]] call BIS_fnc_drawArrow;
+
+	/*_map = findDisplay 12 displayCtrl 51;
+		_map setVariable ["_callerGroup", _callerGroup];
+		_map setVariable ["_targetGroup", _targetGroup];
+		
+		_map ctrlAddEventHandler ["Draw", {
+			_map = _this select 0;
+			_callerGroup = _map getVariable "_callerGroup";
+			
+			_map drawArrow [
+				player, 
+				_callerGroup, 
+				[0.6, 1, 0.37, 1]
+			];
+	}];*/
+};
 
 callCAS = {
 	_callerGroup = _this select 0;
@@ -26,6 +49,8 @@ callCAS = {
 
 	[_pilot, _taskID, ["Provide CAS at the location", _taskDescription, _taskDescription], _taskDestination, 1, 2, true] call BIS_fnc_taskCreate;
 	[_taskID, "ASSIGNED"] call BIS_fnc_taskSetState;
+
+	[_callerGroup, _targetGroup] call drawOnMap;
 
 	_taskID;
 };
@@ -80,7 +105,7 @@ calcSurvivalChance = {
 	_survivalChance = _survivalChance - (_noAmmoUnitsCount * 5);
 	_survivalChance = _survivalChance max 0 min 100;
 
-	hint format ["%1", _survivalChance];
+	// hint format ["%1", _survivalChance];
 
 	_survivalChance;
 };
