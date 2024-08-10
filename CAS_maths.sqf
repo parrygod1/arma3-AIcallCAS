@@ -1,7 +1,8 @@
+dangerCloseDistance = 200;
+
 determineMunitions = {
 	params ["_group", "_targetGroup"];
 
-	    // find the nearest enemy
 	private _unit = leader _group;
 	private _nearestEnemy = _unit findNearestEnemy _unit;
 	private _distanceToEnemy = _unit distance _nearestEnemy;
@@ -14,7 +15,7 @@ determineMunitions = {
 	private _bombScore = 0;
 	private _agmScore = 0;
 
-	if (_distanceToEnemy < 200) then {
+	if (_distanceToEnemy <= dangerCloseDistance) then {
 		_gunScore = _gunScore + 3;
 	} else {
 		if (_distanceToEnemy < 1000) then {
@@ -98,7 +99,7 @@ calcSurvivalChance = {
 	_survivalChance = _survivalChance - (_noAmmoUnitsCount * 5);
 	_survivalChance = _survivalChance max 0 min 100;
 
-	// hint format ["%1", _survivalChance];
+	hint format ["%1", _survivalChance];
 
 	_survivalChance;
 };
@@ -111,15 +112,15 @@ calculateCASWaypoints = {
 
 	private _safeDistance = 1000; // Safe distance from friendly forces in meters
 	private _offsetDistance = 500; // distance offset for IP and egress points
-	private _egressAngleOffset = 45;  // Egress angle offset from attack vector (in degrees)
+	private _egressAngleOffset = 45;
 
-	    // Vector from friendly to enemy
+	// Vector from friendly to enemy
 	private _attackVector = _enemyPos vectorFromTo _friendlyPos;
 
-	    // Normalize the attack vector (direction)
+	// Normalize the attack vector (direction)
 	private _attackDirection = vectorNormalized _attackVector;
 
-	    // Determine the Initial Point (IP) based on the munitions type
+	// Determine the Initial Point (IP) based on the munitions type
 	private _ipDistance = switch (_munitionsType) do {
 		case "Gun": {
 			1500
@@ -144,7 +145,7 @@ calculateCASWaypoints = {
 		_ipPos = _enemyPos vectorAdd (_attackDirection vectorMultiply _ipDistance);
 	};
 
-	    // Calculate the egress position
+	// Calculate the egress position
 	_egressPos = [];
 	if (_munitionsType == "Gun") then {
 		// for a gun run, egress should also avoid flying over enemy lines
@@ -163,7 +164,7 @@ calculateCASWaypoints = {
 		_egressPos = _enemyPos vectorAdd (_rotatedVector vectorMultiply _offsetDistance);
 	};
 
-	    // Ensure IP and Egress points are not too close to friendly forces
+	// Ensure IP and Egress points are not too close to friendly forces
 	if (_ipPos distance _friendlyPos < _safeDistance) then {
 		_ipPos = _friendlyPos vectorAdd (_attackDirection vectorMultiply _safeDistance);
 	};
@@ -171,8 +172,94 @@ calculateCASWaypoints = {
 		_egressPos = _friendlyPos vectorAdd (_attackDirection vectorMultiply (-_safeDistance));
 	};
 
-	    // Return the waypoints
+	// Return the waypoints
 	[_ipPos, _enemyPos, _egressPos];
+};
+
+createCASMarkers = {
+	params ["_waypoints, _callerGroup"];
+	_ipPos = _waypoints select 0;
+	_targetPos = _waypoints select 1;
+	_egressPos = _waypoints select 2;
+	_friendPos = getPos leader _callerGroup;
+
+	_markerTarget = createMarker [format ["par_CAS_TARGET_%1", taskIDCounter], _targetPosition];
+	_markerTarget setMarkerType "mil_circle";
+	_markerTarget setMarkerColor "Color3_FD_F";
+	_markerTarget setMarkerText "TARGET";
+
+	_markerIP = createMarker [format ["par_CAS_IP_%1", taskIDCounter], _ipPos];
+	_markerIP setMarkerType "mil_circle";
+	_markerIP setMarkerColor "Color3_FD_F";
+	_markerIP setMarkerText "IP";
+
+	_markerEgress = createMarker [format ["par_CAS_EGRESS_%1", taskIDCounter], _egressPos];
+	_markerEgress setMarkerType "mil_circle";
+	_markerEgress setMarkerColor "Color3_FD_F";
+	_markerEgress setMarkerText "EGRESS";
+
+	_markerFriend = createMarker [format ["par_CAS_FRIENDLIES_%1", taskIDCounter], _friendPos];
+	_markerFriend setMarkerType "mil_box";
+	_markerFriend setMarkerColor "ColorGreen";
+	_markerFriend setMarkerText "FRIENDLY";
+
+	[_markerIP, _markerTarget, _markerEgress, _markerFriend];
+};
+
+createCASTask = {
+	params ["_callerGroup", "_targetGroup", "_pilot", "_waypoints", "_munitions", "_markers"];
+
+	private _taskID = format ["par_CAS_Task_%1", taskIDCounter];
+	private _taskDescription = format ["CAS %1", groupId _callerGroup];
+	private _taskDestination = _targetPosition;
+
+	private _targetPosition = getPos leader _targetGroup;
+	private _friendlyPosition = getPos leader _callerGroup;
+
+	_targetElevation = (getPosASL leader _targetGroup) select 2;
+
+	_ipPos = mapGridPosition (_waypoints select 0);
+	_egressPos = mapGridPosition (_waypoints select 2);
+
+	_distance = (_waypoints select 0) distance (_waypoints select 1);
+	_gridPosTgt = mapGridPosition _targetPosition;
+	_gridPosFriendly = mapGridPosition _friendlyPosition;
+	_heading = (_waypoints select 0) getDir (_waypoints select 1);
+
+	_dangerClose = _targetPosition distance _friendlyPosition <= dangerCloseDistance;
+
+	_details = format [
+		"
+		9-LINE: <br/><br/>
+		IP: <marker name='par_CAS_IP_%12'>%1</marker><br />
+		HEADING: %2<br />
+		distance: %3<br />
+		TGT ELEVATION: %4<br />
+		TGT DESCRIPTION: %5<br />
+		TGT LOCATION: <marker name='par_CAS_TARGET_%12'>%6</marker> <br />
+		MARK: %7<br />
+		FRIENDLIES: <marker name='par_CAS_FRIENDLIES_%12'>%8</marker><br />
+		EGRESS: <marker name='par_CAS_EGRESS_%12'>%9</marker><br />
+		REMARKS:<br />
+		<p> DANGER CLOSE: %10</p><br />
+		<p> ORDANANCE: %11</p>",
+		_ipPos,
+		_heading,
+		_distance,
+		_targetElevation,
+		"NONE",
+		_gridPosTgt,
+		"NONE",
+		_gridPosFriendly,
+		_egressPos,
+		_dangerClose,
+		_munitions,
+		taskIDCounter
+	];
+	[_pilot, _taskID, [_details, _taskDescription, _taskDescription], _taskDestination, 1, 2, true] call BIS_fnc_taskCreate;
+	[_taskID, "ASSIGNED"] call BIS_fnc_taskSetState;
+
+	_taskID;
 };
 
 drawOnMap = {
@@ -203,19 +290,4 @@ drawOnMap = {
 			[1, 0, 0, 1]
 		];
 	}];
-
-	_marker = createMarker ["markername", _targetPosition];
-	_marker setMarkerType "mil_circle";
-	_marker setMarkerColor "Color3_FD_F";
-	_marker setMarkerText "TARGET";
-
-	_marker2 = createMarker ["markername2", _ipPos];
-	_marker2 setMarkerType "mil_circle";
-	_marker2 setMarkerColor "Color3_FD_F";
-	_marker2 setMarkerText "IP";
-
-	_marker3 = createMarker ["markername3", _egressPos];
-	_marker3 setMarkerType "mil_circle";
-	_marker3 setMarkerColor "Color3_FD_F";
-	_marker3 setMarkerText "EGRESS";
 };
