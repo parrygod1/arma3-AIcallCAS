@@ -1,4 +1,4 @@
-dangerCloseDistance = 200;
+#include "utils.sqf";
 
 determineMunitions = {
 	params ["_group", "_targetGroup"];
@@ -18,7 +18,7 @@ determineMunitions = {
 	if (_distanceToEnemy <= dangerCloseDistance) then {
 		_gunScore = _gunScore + 3;
 	} else {
-		if (_distanceToEnemy < 1000) then {
+		if (_distanceToEnemy <= 650) then {
 			_bombScore = _bombScore + 2;
 			_gunScore = _gunScore + 1;
 		} else {
@@ -53,7 +53,7 @@ calcSurvivalChance = {
 	private _group = _this select 0;
 	private _targetGroup = _this select 1;
 
-	private _survivalChance = 100;
+	private _survivalChance = 0;
 	private _noAmmoUnitsCount = 0;
 	private _lowHealthUnitsCount = 0;
 	private _friendGroupVehicles = 0;
@@ -204,62 +204,6 @@ createCASMarkers = {
 	_markerFriend setMarkerText "FRIENDLY";
 
 	[_markerIP, _markerTarget, _markerEgress, _markerFriend];
-};
-
-createCASTask = {
-	params ["_callerGroup", "_targetGroup", "_pilot", "_waypoints", "_munitions", "_markers"];
-
-	private _taskID = format ["par_CAS_Task_%1", taskIDCounter];
-	private _taskDescription = format ["CAS %1", groupId _callerGroup];
-	private _taskDestination = _targetPosition;
-
-	private _targetPosition = getPos leader _targetGroup;
-	private _friendlyPosition = getPos leader _callerGroup;
-
-	_targetElevation = (getPosASL leader _targetGroup) select 2;
-
-	_ipPos = mapGridPosition (_waypoints select 0);
-	_egressPos = mapGridPosition (_waypoints select 2);
-
-	_distance = (_waypoints select 0) distance (_waypoints select 1);
-	_gridPosTgt = mapGridPosition _targetPosition;
-	_gridPosFriendly = mapGridPosition _friendlyPosition;
-	_heading = (_waypoints select 0) getDir (_waypoints select 1);
-
-	_dangerClose = _targetPosition distance _friendlyPosition <= dangerCloseDistance;
-
-	_details = format [
-		"
-		9-LINE: <br/><br/>
-		IP: <marker name='par_CAS_IP_%12'>%1</marker><br />
-		HEADING: %2<br />
-		distance: %3<br />
-		TGT ELEVATION: %4<br />
-		TGT DESCRIPTION: %5<br />
-		TGT LOCATION: <marker name='par_CAS_TARGET_%12'>%6</marker> <br />
-		MARK: %7<br />
-		FRIENDLIES: <marker name='par_CAS_FRIENDLIES_%12'>%8</marker><br />
-		EGRESS: <marker name='par_CAS_EGRESS_%12'>%9</marker><br />
-		REMARKS:<br />
-		<p> DANGER CLOSE: %10</p><br />
-		<p> ORDANANCE: %11</p>",
-		_ipPos,
-		_heading,
-		_distance,
-		_targetElevation,
-		"NONE",
-		_gridPosTgt,
-		"NONE",
-		_gridPosFriendly,
-		_egressPos,
-		_dangerClose,
-		_munitions,
-		taskIDCounter
-	];
-	[_pilot, _taskID, [_details, _taskDescription, _taskDescription], _taskDestination, 1, 2, true] call BIS_fnc_taskCreate;
-	[_taskID, "ASSIGNED"] call BIS_fnc_taskSetState;
-
-	_taskID;
 };
 
 drawOnMap = {

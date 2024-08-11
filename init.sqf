@@ -1,4 +1,5 @@
 #include "CAS_maths.sqf";
+#include "CAS_tasking.sqf";
 
 test = "";
 
@@ -12,6 +13,7 @@ unitMaxDamage = 0.5;
 maxGroupDistance = 1000;
 minGroupDistance = 50;
 newTaskCooldown = 200;
+dangerCloseDistance = 200;
 
 callCAS = {
 	_callerGroup = _this select 0;
@@ -20,13 +22,9 @@ callCAS = {
 	_aircraft = airVehicles select 0;
 	_pilot = driver _aircraft;
 	_targetPosition = getPos leader _targetGroup;
+	_midPoint = [getPos leader _callerGroup, _targetPosition] call getMidPoint;
 
-	_munitions = [_callerGroup, _targetGroup] call determineMunitions;
-	_waypoints = [_callerGroup, _targetPosition, _munitions] call calculateCASWaypoints;
-	_markers = [_waypoints, _callerGroup] call createCASMarkers;
-	_taskID = [_callerGroup, _targetGroup, _pilot, _waypoints, _munitions] call createCASTask;
-
-	[_waypoints] call drawOnMap;
+	_taskID = [_callerGroup, _targetGroup, _pilot] call handleCASTasking;
 
 	taskIDCounter = taskIDCounter + 1;
 
