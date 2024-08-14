@@ -83,7 +83,11 @@ createCASTask = {
 		_munitions,
 		taskIDCounter
 	];
+
+	_details;
 };
+
+taskWaypointsMap = createHashMap;
 
 handleCASTasking = {
 	params ["_callerGroup", "_targetGroup", "_pilot"];
@@ -94,35 +98,34 @@ handleCASTasking = {
 	private _taskDestination = _targetPosition;
 
 	_munitions = [_callerGroup, _targetGroup] call determineMunitions;
-	_infoFlags = [_callerGroup] call getInfoFlags;
-
-	_doCreateWaypoints = _infoFlags select 0;
-	_doSmokeMarkTgt = _infoFlags select 3;
-	_doSmokeMarkFriendly = _infoFlags select 4;
+	/*_infoFlags = [_callerGroup] call getInfoFlags;
+		
+		_doCreateWaypoints = _infoFlags select 0;
+		_doSmokeMarkTgt = _infoFlags select 3;
+	_doSmokeMarkFriendly = _infoFlags select 4;*/
 
 	_waypoints = [];
 	_markers = [];
 
-	if (_doCreateWaypoints) then {
-		_waypoints = [_callerGroup, _targetPosition, _munitions] call calculateCASWaypoints;
-		_markers = [_waypoints, _callerGroup] call createCASMarkers;
-	}
+	_waypoints = [_callerGroup, _targetPosition, _munitions] call calculateCASWaypoints;
+	_markers = [_waypoints, _callerGroup] call createCASMarkers;
 
-	if (_doSmokeMarkTgt) then {
-		[_targetPosition, "red"] call createSmoke;
-	}
+	/*if (_doSmokeMarkTgt) then {
+			[_targetPosition, "red"] call createSmoke;
+		}
+		
+		if (_doSmokeMarkFriendly) then {
+			[getPos leader _callerGroup, "blue"] call createSmoke;
+	}*/
 
-	if (_doSmokeMarkFriendly) then {
-		[getPos leader _callerGroup, "blue"] call createSmoke;
-	}
+	_details = [_callerGroup, _targetGroup, _waypoints, _munitions, _markers] call createCASTask;
 
-	_taskID = [_callerGroup, _targetGroup, _waypoints, _munitions] call createCASTask;
+	// [_midPoint, "green"] call createSmoke;
+	// [_waypoints] call drawOnMap;
 
-	[_midPoint, "green"] call createSmoke;
-	[_waypoints] call drawOnMap;
+	taskWaypointsMap set [_taskID, _waypoints];
 
-	[_pilot, _taskID, [_details, _taskDescription, _taskDescription], _taskDestination, 1, 2, true] call BIS_fnc_taskCreate;
-	[_taskID, "ASSIGNED"] call BIS_fnc_taskSetState;
+	[pilots, _taskID, [_details, _taskDescription, _taskDescription], _taskDestination, "CREATED", 2, true] call BIS_fnc_taskCreate;
 
 	_taskID;
 };

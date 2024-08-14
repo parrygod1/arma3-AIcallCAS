@@ -5,6 +5,7 @@ test = "";
 
 infantryGroups = [];
 airVehicles = [];
+pilots = [];
 
 maxTasksPerUnit = 1;
 minSurvivalChance = 70;
@@ -130,7 +131,60 @@ casLoop = {
 
 {
 	private _unit = _x;
-	if (vehicle _x isKindOf "Plane" or vehicle _x isKindOf "Helicopter") then {
+	if (side _x == west && vehicle _x isKindOf "Air") then {
 		airVehicles pushBack _unit;
 	};
 } forEach allUnits;
+
+{
+	private _vehicle = _x;
+
+	_pilot = driver _vehicle;
+
+	pilots pushBack _pilot;
+	pilots pushBack gunner _vehicle;
+
+	_pilot addEventHandler ["TaskSetAsCurrent", {
+		params ["_unit", "_task"];
+		_currentTask = _unit call BIS_fnc_taskCurrent;
+		_taskVar = _unit getVariable ["CAS_Task_ID", ""];
+
+		// CAS task unassigned
+		if ("par_CAS_Task" in _taskVar) then {
+			if (!(_currentTask isEqualTo _taskVar)) then {
+				_str = _taskVar splitString "_";
+				_id = _str select 3;
+
+				_unit setVariable ["CAS_Task_ID", ""];
+
+				_markerTarget = format ["par_CAS_TARGET_%1", _id];
+				_markerIP = format ["par_CAS_IP_%1", _id];
+				_markerEgress = format ["par_CAS_EGRESS_%1", _id];
+				_markerFriend = format ["par_CAS_FRIENDLIES_%1", _id];
+
+				_markerTarget setMarkerAlphaLocal 0;
+				_markerIP setMarkerAlphaLocal 0;
+				_markerEgress setMarkerAlphaLocal 0;
+				_markerFriend setMarkerAlphaLocal 0;
+			};
+		};
+
+		if ("par_CAS_Task" in _currentTask) then {
+			_str = _currentTask splitString "_";
+			_id = _str select 3;
+			_unit setVariable ["CAS_Task_ID", _currentTask];
+
+			_markerTarget = format ["par_CAS_TARGET_%1", _id];
+			_markerIP = format ["par_CAS_IP_%1", _id];
+			_markerEgress = format ["par_CAS_EGRESS_%1", _id];
+			_markerFriend = format ["par_CAS_FRIENDLIES_%1", _id];
+
+			_markerTarget setMarkerAlphaLocal 1;
+			_markerIP setMarkerAlphaLocal 1;
+			_markerEgress setMarkerAlphaLocal 1;
+			_markerFriend setMarkerAlphaLocal 1;
+		};
+	}];
+} forEach airVehicles;
+
+[] call drawOnMap;
