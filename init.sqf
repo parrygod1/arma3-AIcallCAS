@@ -1,6 +1,6 @@
 #include "CAS_maths.sqf";
 #include "CAS_tasking.sqf";
-
+#include "CAS_drawing.sqf";
 test = "";
 
 infantryGroups = [];
@@ -40,7 +40,7 @@ casLoop = {
 	private _activeTasks = 0;
 	private _taskID = "";
 	_group = _this select 0;
-	_targetGroup = group getAttackTarget (leader _group);
+	_targetGroup = [_group] call detectTargetGroup;
 	_isAlive = true;
 
 	while { _isAlive } do {
@@ -53,8 +53,9 @@ casLoop = {
 			_chance = [_group, _targetGroup] call calcSurvivalChance;
 			_groupsDistance = leader (_group) distance leader (_targetGroup);
 
-			if (!isNull (getAttackTarget (leader _group))) then {
-				_targetGroup = group getAttackTarget (leader _group);
+			_potentialGroup = [_group] call detectTargetGroup;
+			if (!(isNull _potentialGroup)) then {
+				_targetGroup = _potentialGroup;
 			};
 
 			if (_chance < minSurvivalChance &&
@@ -139,44 +140,15 @@ casLoop = {
 {
 	private _vehicle = _x;
 
-	_pilot = driver _vehicle;
+	_gunner = gunner _vehicle;
+	_pilot = effectiveCommander _vehicle;
 
 	pilots pushBack _pilot;
+	pilots pushBack _gunner;
 	pilots pushBack gunner _vehicle;
 
-	_pilot addEventHandler ["TaskSetAsCurrent", {
-		params ["_unit", "_task"];
-
-		private _currentTask = _unit call BIS_fnc_taskCurrent;
-		private _taskVar = _unit getVariable ["CAS_Task_ID", ""];
-
-		private _setMarkerVisibility = {
-			params ["_id", "_alpha"];
-
-			private _markerTarget = format ["par_CAS_TARGET_%1", _id];
-			private _markerIP = format ["par_CAS_IP_%1", _id];
-			private _markerEgress = format ["par_CAS_EGRESS_%1", _id];
-			private _markerFriend = format ["par_CAS_FRIENDLIES_%1", _id];
-
-			{
-				_x setMarkerAlphaLocal _alpha;
-			} forEach [_markerTarget, _markerIP, _markerEgress, _markerFriend];
-		};
-
-		// Check for CAS task unassignment
-		if ("par_CAS_Task" in _taskVar && !(_currentTask isEqualTo _taskVar)) then {
-			private _id = (_taskVar splitString "_") select 3;
-			_unit setVariable ["CAS_Task_ID", ""];
-			[_id, 0] call _setMarkerVisibility;
-		};
-
-		// Check for CAS task assignment
-		if ("par_CAS_Task" in _currentTask) then {
-			private _id = (_currentTask splitString "_") select 3;
-			_unit setVariable ["CAS_Task_ID", _currentTask];
-			[_id, 1] call _setMarkerVisibility;
-		};
-	}];
+	[_pilot] call setupTaskEvent;
+	[_gunner] call setupTaskEvent;
 } forEach airVehicles;
 
 [] call drawOnMap;

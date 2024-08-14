@@ -1,5 +1,6 @@
 #include "CAS_maths.sqf";
 #include "utils.sqf";
+#include "CAS_drawing.sqf";
 
 // Calc chance of markers
 getInfoFlags = {
@@ -34,6 +35,44 @@ getInfo = {
 	_showGridPosFriendly = _infoFlags select 2;
 	_doSmokeMarkTgt = _infoFlags select 3;
 	_doSmokeMarkFriendly = _infoFlags select 4;
+};
+
+setupTaskEvent = {
+	_pilot = _this select 0;
+
+	_pilot addEventHandler ["TaskSetAsCurrent", {
+		params ["_unit", "_task"];
+
+		private _currentTask = _unit call BIS_fnc_taskCurrent;
+		private _taskVar = _unit getVariable ["CAS_Task_ID", ""];
+
+		private _setMarkerVisibility = {
+			params ["_id", "_alpha"];
+
+			private _markerTarget = format ["par_CAS_TARGET_%1", _id];
+			private _markerIP = format ["par_CAS_IP_%1", _id];
+			private _markerEgress = format ["par_CAS_EGRESS_%1", _id];
+			private _markerFriend = format ["par_CAS_FRIENDLIES_%1", _id];
+
+			{
+				_x setMarkerAlphaLocal _alpha;
+			} forEach [_markerTarget, _markerIP, _markerEgress, _markerFriend];
+		};
+
+		// Check for CAS task unassignment
+		if ("par_CAS_Task" in _taskVar && !(_currentTask isEqualTo _taskVar)) then {
+			private _id = (_taskVar splitString "_") select 3;
+			_unit setVariable ["CAS_Task_ID", ""];
+			[_id, 0] call _setMarkerVisibility;
+		};
+
+		// Check for CAS task assignment
+		if ("par_CAS_Task" in _currentTask) then {
+			private _id = (_currentTask splitString "_") select 3;
+			_unit setVariable ["CAS_Task_ID", _currentTask];
+			[_id, 1] call _setMarkerVisibility;
+		};
+	}];
 };
 
 createCASTask = {
@@ -125,7 +164,13 @@ handleCASTasking = {
 
 	taskWaypointsMap set [_taskID, _waypoints];
 
-	[pilots, _taskID, [_details, _taskDescription, _taskDescription], _taskDestination, "CREATED", 2, true] call BIS_fnc_taskCreate;
+	{
+		_doNotify = false;
+		if (_x call BIS_fnc_taskCurrent isEqualTo "") then {
+			_doNotify = true;
+		};
+		[_x, _taskID, [_details, _taskDescription, _taskDescription], _taskDestination, "CREATED", 2, _doNotify] call BIS_fnc_taskCreate;
+	} forEach pilots;
 
 	_taskID;
 };
