@@ -8,8 +8,8 @@ determineMunitions = {
 	private _distanceToEnemy = _unit distance _nearestEnemy;
 	private _enemyUnit = leader _targetGroup;
 
-	private _nearbyVehicles = nearestObjects [_enemyUnit, ["Car", "Tank", "Wheeled_APC_F", "IFV"], 500];
-	private _nearbyBuildings = nearestObjects [_enemyUnit, ["House"], 100];
+	private _nearbyVehicles = nearestObjects [_enemyUnit, ["Car", "Tank", "Wheeled_APC_F", "IFV", "TrackedAPC", "WheeledAPC"], 500];
+	private _nearbyBuildings = nearestObjects [_enemyUnit, ["House"], 50];
 
 	private _gunScore = 0;
 	private _bombScore = 0;
@@ -51,31 +51,52 @@ determineMunitions = {
 
 calcSurvivalChance = {
 	private _group = _this select 0;
-	private _targetGroup = _this select 1;
 
-	private _survivalChance = 0;
+	private _targetList = [leader _group nearTargets 500] call getSortedEnemies;
+	private _targetGroup = [];
+
+	{
+		_targetGroup pushBack (_x select 4);
+	} forEach _targetList;
+
+	private _survivalChance = 100;
 	private _noAmmoUnitsCount = 0;
 	private _lowHealthUnitsCount = 0;
-	private _friendGroupVehicles = 0;
-	private _enemyGroupVehicles = 0;
+
+	private _friendGroupCars = 0;
+	private _friendGroupAPCs = 0;
+	private _friendGroupTanks = 0;
+
+	private _enemyGroupCars = 0;
+	private _enemyGroupAPCs = 0;
+	private _enemyGroupTanks = 0;
+
 	private _friendGroupMen = 0;
 	private _enemyGroupMen = 0;
 
 	{
-		if (damage _x > unitMaxDamage) then {
+		if (damage _x > unitMaxDamage && alive _x) then {
 			_lowHealthUnitsCount = _lowHealthUnitsCount + 1;
 		};
-		if (!(someAmmo _x)) then {
+		if (!(someAmmo _x) && alive _x) then {
 			_noAmmoUnitsCount = _noAmmoUnitsCount + 1;
 		};
 
-		if (_x isKindOf "Man") then {
+		if (_x isKindOf "Man" && alive _x) then {
 			_friendGroupMen = _friendGroupMen + 1;
 		};
 	} forEach units _group;
 	{
-		if (_x isKindOf "Tank" or _x isKindOf "Wheeled_APC_F" or _x isKindOf "IFV" or _x isKindOf "StaticWeapon") then {
-			_friendGroupVehicles = _friendGroupVehicles + 1;
+		if (_x isKindOf "Car" or _x isKindOf "StaticWeapon") then {
+			_friendGroupCars = _friendGroupCars + 1;
+		};
+
+		if (_x isKindOf "WheeledAPC" or _x isKindOf "IFV" or _x isKindOf "TrackedAPC") then {
+			_friendGroupAPCs = _friendGroupAPCs + 1;
+		};
+
+		if (_x isKindOf "Tank") then {
+			_friendGroupTanks = _friendGroupTanks + 1;
 		};
 	} forEach ([_group, true] call BIS_fnc_groupVehicles);
 
@@ -83,25 +104,55 @@ calcSurvivalChance = {
 		if (_x isKindOf "Man") then {
 			_enemyGroupMen = _enemyGroupMen + 1;
 		};
-	} forEach units _targetGroup;
-	{
-		if (_x isKindOf "Tank" or _x isKindOf "Wheeled_APC_F" or _x isKindOf "IFV" or _x isKindOf "StaticWeapon") then {
-			_enemyGroupVehicles = _enemyGroupVehicles + 1;
+
+		if (_x isKindOf "Car" or _x isKindOf "StaticWeapon") then {
+			_enemyGroupCars = _enemyGroupCars + 1;
 		};
-	} forEach ([_targetGroup, true] call BIS_fnc_groupVehicles);
 
-	private _unitsDiff = _enemyGroupMen - _friendGroupMen;
-	private _vehiclesDiff = _enemyGroupVehicles - _friendGroupVehicles;
+		if (_x isKindOf "WheeledAPC" or _x isKindOf "IFV" or _x isKindOf "TrackedAPC") then {
+			_enemyGroupAPCs = _enemyGroupAPCs + 1;
+		};
 
-	_survivalChance = _survivalChance - (_vehiclesDiff * 30);
-	_survivalChance = _survivalChance - (_unitsDiff * 15);
-	_survivalChance = _survivalChance - (_lowHealthUnitsCount * 10);
-	_survivalChance = _survivalChance - (_noAmmoUnitsCount * 5);
+		if (_x isKindOf "Tank") then {
+			_enemyGroupTanks = _enemyGroupTanks + 1;
+		};
+	} forEach _targetGroup;
+
+	private _menDiff = _enemyGroupMen - _friendGroupMen;
+	private _carsDiff = _enemyGroupCars - _friendGroupCars;
+	private _apcsDiff = _enemyGroupAPCs - _friendGroupAPCs;
+	private _tanksDiff = _enemyGroupTanks - _friendGroupTanks;
+
+	_survivalChance = _survivalChance - (_carsDiff * 15);
+	_survivalChance = _survivalChance - (_apcsDiff * 20);
+	_survivalChance = _survivalChance - (_tanksDiff * 30);
+	_survivalChance = _survivalChance - (_menDiff * 10);
+	_survivalChance = _survivalChance - (_lowHealthUnitsCount * 5);
+	_survivalChance = _survivalChance - (_noAmmoUnitsCount * 2);
 	_survivalChance = _survivalChance max 0 min 100;
 
-	// hint format ["%1", _survivalChance];
+	test = format ["%1 -- %2", _enemyGroupMen, _friendGroupMen];
 
-	_survivalChance;
+	hint format ["
+		cars: %1 <br />
+		apcs: %2 <br />
+		tanks: %3 <br />
+		men: %4 <br />
+		lowHealth: %5 <br />
+		noAmmo: %6 <br />
+		TOTAL: %7",
+		_carsDiff * 15,
+		_apcsDiff * 20,
+		_tanksDiff * 30,
+		_menDiff * 10,
+		_lowHealthUnitsCount * 5,
+		_noAmmoUnitsCount * 2,
+		_survivalChance
+	];
+
+	_friendCount = _friendGroupMen + _friendGroupCars + _friendGroupAPCs + _friendGroupTanks;
+
+	[_survivalChance, _friendCount];
 };
 
 calculateCASWaypoints = {
@@ -176,14 +227,11 @@ calculateCASWaypoints = {
 	[_ipPos, _enemyPos, _egressPos];
 };
 
-detectTargetGroup = {
-	params ["_group"];
-
-	_enemyList = leader _group nearTargets 700;
-	_targetGroup = objNull;
+getSortedEnemies = {
+	params ["_targetList"];
 
 	_sortedList = [
-		_enemyList,
+		_targetList,
 		[_group],
 		{
 			_x select 3 // Order by subjectiveCost
@@ -193,6 +241,17 @@ detectTargetGroup = {
 			_input0 knowsAbout (_x select 4) > 0
 		}
 	] call BIS_fnc_sortBy;
+
+	_sortedList;
+};
+
+detectTargetGroup = {
+	params ["_group"];
+
+	_targetList = leader _group nearTargets 500;
+	_targetGroup = objNull;
+
+	_sortedList = [_targetList] call getSortedEnemies;
 
 	if (count _sortedList > 0) then {
 		_targetGroup = group ((_sortedList select 0) select 4);

@@ -7,14 +7,27 @@ infantryGroups = [];
 airVehicles = [];
 pilots = [];
 
-maxTasksPerUnit = 1;
-minSurvivalChance = 70;
 taskIDCounter = 0;
+
+maxTasksPerUnit = 1;
+
+// Percentage under which CAS will be called for a group
+minSurvivalChance = 70;
+
+// damage for which a unit is considered low health
 unitMaxDamage = 0.5;
+
+// distance limit between friend group and enemy group
 maxGroupDistance = 1000;
 minGroupDistance = 50;
+
+// Cooldown after a task is completed
 newTaskCooldown = 200;
 dangerCloseDistance = 200;
+
+// min number of units for which a group can call in CAS
+// Prevent small units that might get killed very soon to call it in.
+minFriendCount = 5;
 
 callCAS = {
 	_callerGroup = _this select 0;
@@ -50,7 +63,9 @@ casLoop = {
 		_lastTaskTime = _group getVariable ["timeTaskEnded", -newTaskCooldown];
 
 		if (_isAlive) then {
-			_chance = [_group, _targetGroup] call calcSurvivalChance;
+			_chanceData = [_group] call calcSurvivalChance;
+			_chance = _chanceData select 0;
+			_friendCount = _chanceData select 1;
 			_groupsDistance = leader (_group) distance leader (_targetGroup);
 
 			_potentialGroup = [_group] call detectTargetGroup;
@@ -62,6 +77,7 @@ casLoop = {
 			_activeTasks < maxTasksPerUnit &&
 			_groupsDistance < maxGroupDistance &&
 			_groupsDistance >= minGroupDistance &&
+			_friendCount >= minFriendCount &&
 			_lastTaskTime + newTaskCooldown <= time) then {
 				_activeTasks = _activeTasks + 1;
 				_taskID = [_group, _targetGroup] call callCAS;
