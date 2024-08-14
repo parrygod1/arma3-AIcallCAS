@@ -146,43 +146,35 @@ casLoop = {
 
 	_pilot addEventHandler ["TaskSetAsCurrent", {
 		params ["_unit", "_task"];
-		_currentTask = _unit call BIS_fnc_taskCurrent;
-		_taskVar = _unit getVariable ["CAS_Task_ID", ""];
 
-		// CAS task unassigned
-		if ("par_CAS_Task" in _taskVar) then {
-			if (!(_currentTask isEqualTo _taskVar)) then {
-				_str = _taskVar splitString "_";
-				_id = _str select 3;
+		private _currentTask = _unit call BIS_fnc_taskCurrent;
+		private _taskVar = _unit getVariable ["CAS_Task_ID", ""];
 
-				_unit setVariable ["CAS_Task_ID", ""];
+		private _setMarkerVisibility = {
+			params ["_id", "_alpha"];
 
-				_markerTarget = format ["par_CAS_TARGET_%1", _id];
-				_markerIP = format ["par_CAS_IP_%1", _id];
-				_markerEgress = format ["par_CAS_EGRESS_%1", _id];
-				_markerFriend = format ["par_CAS_FRIENDLIES_%1", _id];
+			private _markerTarget = format ["par_CAS_TARGET_%1", _id];
+			private _markerIP = format ["par_CAS_IP_%1", _id];
+			private _markerEgress = format ["par_CAS_EGRESS_%1", _id];
+			private _markerFriend = format ["par_CAS_FRIENDLIES_%1", _id];
 
-				_markerTarget setMarkerAlphaLocal 0;
-				_markerIP setMarkerAlphaLocal 0;
-				_markerEgress setMarkerAlphaLocal 0;
-				_markerFriend setMarkerAlphaLocal 0;
-			};
+			{
+				_x setMarkerAlphaLocal _alpha;
+			} forEach [_markerTarget, _markerIP, _markerEgress, _markerFriend];
 		};
 
+		// Check for CAS task unassignment
+		if ("par_CAS_Task" in _taskVar && !(_currentTask isEqualTo _taskVar)) then {
+			private _id = (_taskVar splitString "_") select 3;
+			_unit setVariable ["CAS_Task_ID", ""];
+			[_id, 0] call _setMarkerVisibility;
+		};
+
+		// Check for CAS task assignment
 		if ("par_CAS_Task" in _currentTask) then {
-			_str = _currentTask splitString "_";
-			_id = _str select 3;
+			private _id = (_currentTask splitString "_") select 3;
 			_unit setVariable ["CAS_Task_ID", _currentTask];
-
-			_markerTarget = format ["par_CAS_TARGET_%1", _id];
-			_markerIP = format ["par_CAS_IP_%1", _id];
-			_markerEgress = format ["par_CAS_EGRESS_%1", _id];
-			_markerFriend = format ["par_CAS_FRIENDLIES_%1", _id];
-
-			_markerTarget setMarkerAlphaLocal 1;
-			_markerIP setMarkerAlphaLocal 1;
-			_markerEgress setMarkerAlphaLocal 1;
-			_markerFriend setMarkerAlphaLocal 1;
+			[_id, 1] call _setMarkerVisibility;
 		};
 	}];
 } forEach airVehicles;

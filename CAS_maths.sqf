@@ -239,4 +239,36 @@ drawOnMap = {
 			];
 		};
 	}];
+
+	waitUntil {
+		!isNull (uiNamespace getVariable ["RscCustomInfoMiniMap", displayNull])
+	};
+
+	private _display = uiNamespace getVariable ["RscCustomInfoMiniMap", displayNull];
+	private _miniMapControlGroup = _display displayCtrl 13301;
+	private _miniMap = _miniMapControlGroup controlsGroupCtrl 101;
+
+	_miniMap ctrlAddEventHandler ["Draw", {
+		_currentTask = player call BIS_fnc_taskCurrent;
+
+		if ("par_CAS_Task" in _currentTask) then {
+			_map = _this select 0;
+			_waypoints = taskWaypointsMap get _currentTask;
+			_ipPos = _waypoints select 0;
+			_targetPos = _waypoints select 1;
+			_egressPos = _waypoints select 2;
+
+			_map drawArrow [
+				_ipPos,
+				_targetPos,
+				[1, 0, 0, 1]
+			];
+
+			_map drawArrow [
+				_targetPos,
+				_egressPos,
+				[1, 0, 0, 1]
+			];
+		};
+	}];
 };
