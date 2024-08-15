@@ -131,8 +131,9 @@ taskWaypointsMap = createHashMap;
 handleCASTasking = {
 	params ["_callerGroup", "_targetGroup", "_pilot"];
 
+	private _locationName = text nearestLocation [getPos leader _callerGroup, ["NameCity", "NameCityCapital", "NameLocal", "NameMarine", "NameVillage"]];
 	private _taskID = format ["par_CAS_Task_%1", taskIDCounter];
-	private _taskDescription = format ["CAS %1", groupId _callerGroup];
+	private _taskDescription = format ["CAS %1 -- %2", groupId _callerGroup, _locationName];
 	private _targetPosition = getPos leader _targetGroup;
 	private _taskDestination = _targetPosition;
 

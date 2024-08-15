@@ -11,8 +11,8 @@ taskIDCounter = 0;
 
 maxTasksPerUnit = 1;
 
-// Percentage under which CAS will be called for a group
-minSurvivalChance = 70;
+// Percentage over which CAS will be called for a group
+maxForceDiff = 40;
 
 // damage for which a unit is considered low health
 unitMaxDamage = 0.5;
@@ -30,15 +30,15 @@ dangerCloseDistance = 200;
 minFriendCount = 5;
 
 callCAS = {
-	_callerGroup = _this select 0;
-	_targetGroup = _this select 1;
+	private _callerGroup = _this select 0;
+	private _targetGroup = _this select 1;
 
-	_aircraft = airVehicles select 0;
-	_pilot = driver _aircraft;
-	_targetPosition = getPos leader _targetGroup;
-	_midPoint = [getPos leader _callerGroup, _targetPosition] call getMidPoint;
+	private _aircraft = airVehicles select 0;
+	private _pilot = driver _aircraft;
+	private _targetPosition = getPos leader _targetGroup;
+	private _midPoint = [getPos leader _callerGroup, _targetPosition] call getMidPoint;
 
-	_taskID = [_callerGroup, _targetGroup, _pilot] call handleCASTasking;
+	private _taskID = [_callerGroup, _targetGroup, _pilot] call handleCASTasking;
 
 	taskIDCounter = taskIDCounter + 1;
 
@@ -52,9 +52,9 @@ callCAS = {
 casLoop = {
 	private _activeTasks = 0;
 	private _taskID = "";
-	_group = _this select 0;
-	_targetGroup = [_group] call detectTargetGroup;
-	_isAlive = true;
+	private _group = _this select 0;
+	private _targetGroup = [_group] call detectTargetGroup;
+	private _isAlive = true;
 
 	while { _isAlive } do {
 		_isAlive = units _group findIf {
@@ -62,50 +62,52 @@ casLoop = {
 		} > -1;
 		_lastTaskTime = _group getVariable ["timeTaskEnded", -newTaskCooldown];
 
-		if (_isAlive) then {
-			_chanceData = [_group] call calcSurvivalChance;
-			_chance = _chanceData select 0;
-			_friendCount = _chanceData select 1;
-			_groupsDistance = leader (_group) distance leader (_targetGroup);
-
-			_potentialGroup = [_group] call detectTargetGroup;
-			if (!(isNull _potentialGroup)) then {
-				_targetGroup = _potentialGroup;
+		if (!_isAlive) exitWith {
+			if (_activeTasks > 0) then {
+				[_taskID, "FAILED"] call BIS_fnc_taskSetState;
+				_group setVariable ["taskID", ""];
+				_group setVariable ["timeTaskEnded", time];
 			};
+		};
 
-			if (_chance < minSurvivalChance &&
-			_activeTasks < maxTasksPerUnit &&
-			_groupsDistance < maxGroupDistance &&
-			_groupsDistance >= minGroupDistance &&
-			_friendCount >= minFriendCount &&
-			_lastTaskTime + newTaskCooldown <= time) then {
-				_activeTasks = _activeTasks + 1;
-				_taskID = [_group, _targetGroup] call callCAS;
-				_group setVariable ["taskID", _taskID];
-			};
+		_chanceData = [_group] call calcSurvivalChance;
+		private _forceDiff = _chanceData select 0;
+		private _friendCount = _chanceData select 1;
+		private _groupsDistance = leader _group distance leader _targetGroup;
 
-			if (_activeTasks > 0 && _chance > minSurvivalChance) then {
+		_potentialGroup = [_group] call detectTargetGroup;
+		if (!isNull _potentialGroup) then {
+			_targetGroup = _potentialGroup;
+		};
+
+		if (_forceDiff >= maxForceDiff &&
+		_activeTasks < maxTasksPerUnit &&
+		_groupsDistance < maxGroupDistance &&
+		_groupsDistance >= minGroupDistance &&
+		_friendCount >= minFriendCount &&
+		_lastTaskTime + newTaskCooldown <= time) then {
+			_activeTasks = _activeTasks + 1;
+			_taskID = [_group, _targetGroup] call callCAS;
+			_group setVariable ["taskID", _taskID];
+		};
+
+		if (_activeTasks > 0) then {
+			if (_forceDiff < maxForceDiff) then {
 				_activeTasks = _activeTasks - 1;
 				[_taskID, "SUCCEEDED"] call BIS_fnc_taskSetState;
 				_group setVariable ["taskID", ""];
 				_group setVariable ["timeTaskEnded", time];
+			} else {
+				if (_groupsDistance > maxGroupDistance) then {
+					_activeTasks = _activeTasks - 1;
+					[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
+					_group setVariable ["taskID", ""];
+					_group setVariable ["timeTaskEnded", time];
+				};
 			};
-
-			if (_activeTasks > 0 && _groupsDistance > maxGroupDistance) then {
-				_activeTasks = _activeTasks - 1;
-				[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
-				_group setVariable ["taskID", ""];
-				_group setVariable ["timeTaskEnded", time];
-			};
-
-			sleep 5;
 		};
-	};
 
-	if (_activeTasks > 0 && !_isAlive) then {
-		[_taskID, "FAILED"] call BIS_fnc_taskSetState;
-		_group setVariable ["taskID", ""];
-		_group setVariable ["timeTaskEnded", time];
+		sleep 5;
 	};
 };
 
@@ -114,35 +116,38 @@ casLoop = {
 
 	if (side _group == side player) then {
 		private _isInfantryGroup = true;
+
 		{
 			if (!(_x isKindOf "Man") || (vehicle _x isKindOf "Air")) exitWith {
 				_isInfantryGroup = false;
 			};
 		} forEach units _group;
 
-		if (_isInfantryGroup) then {
-			infantryGroups pushBack _group;
+		if (!_isInfantryGroup) exitWith {};
 
-			_group addEventHandler ["CombatModeChanged", {
-				_group = _this select 0;
-				_newMode = _this select 1;
+		infantryGroups pushBack _group;
 
-				if (_newMode isEqualTo "COMBAT") then {
-					_handle = [_group] spawn casLoop;
-					_group setVariable ["loopHandle", _handle];
-				} else {
-					if (!(isNull (_group getVariable "loopHandle"))) then {
-						terminate (_group getVariable "loopHandle");
+		_group addEventHandler ["CombatModeChanged", {
+			private _group = _this select 0;
+			private _newMode = _this select 1;
 
-						_taskID = _group getVariable "taskID";
-						if (!(_taskID isEqualTo "")) then {
-							[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
-							_group setVariable ["timeTaskEnded", time];
-						};
-					}
+			if (_newMode isEqualTo "COMBAT") then {
+				private _handle = [_group] spawn casLoop;
+				_group setVariable ["loopHandle", _handle];
+			} else {
+				private _loopHandle = _group getVariable "loopHandle";
+				if (!isNull _loopHandle) then {
+					terminate _loopHandle;
+					_group setVariable ["loopHandle", objNull];
+
+					private _taskID = _group getVariable "taskID";
+					if (!(_taskID isEqualTo "")) then {
+						[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
+						_group setVariable ["timeTaskEnded", time];
+					};
 				};
-			}];
-		};
+			};
+		}];
 	};
 } forEach allGroups;
 
