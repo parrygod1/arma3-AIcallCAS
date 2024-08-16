@@ -1,6 +1,7 @@
 #include "CAS_maths.sqf";
 #include "CAS_tasking.sqf";
 #include "CAS_drawing.sqf";
+#include "CAS_loops.sqf";
 test = "";
 
 infantryGroups = [];
@@ -8,6 +9,9 @@ airVehicles = [];
 pilots = [];
 
 taskIDCounter = 0;
+
+maxGlobalTasks = 3;
+activeGlobalTasks = 0;
 
 maxTasksPerUnit = 1;
 
@@ -21,139 +25,19 @@ unitMaxDamage = 0.5;
 maxGroupDistance = 1000;
 minGroupDistance = 50;
 
-// Cooldown after a task is completed
-newTaskCooldown = 200;
+// Cooldown for group after a task is completed
+newGroupTaskCooldown = 200;
 dangerCloseDistance = 200;
 
 // min number of units for which a group can call in CAS
 // Prevent small units that might get killed very soon to call it in.
-minFriendCount = 5;
+minFriendCount = 2;
 
-callCAS = {
-	private _callerGroup = _this select 0;
-	private _targetGroup = _this select 1;
-
-	private _aircraft = airVehicles select 0;
-	private _pilot = driver _aircraft;
-	private _targetPosition = getPos leader _targetGroup;
-	private _midPoint = [getPos leader _callerGroup, _targetPosition] call getMidPoint;
-
-	private _taskID = [_callerGroup, _targetGroup, _pilot] call handleCASTasking;
-
-	taskIDCounter = taskIDCounter + 1;
-
-	{
-		_x setSuppression 1;
-	} forEach units _callerGroup;
-
-	_taskID;
-};
-
-casLoop = {
-	private _activeTasks = 0;
-	private _taskID = "";
-	private _group = _this select 0;
-	private _targetGroup = [_group] call detectTargetGroup;
-	private _isAlive = true;
-
-	while { _isAlive } do {
-		_isAlive = units _group findIf {
-			alive _x
-		} > -1;
-		_lastTaskTime = _group getVariable ["timeTaskEnded", -newTaskCooldown];
-
-		if (!_isAlive) exitWith {
-			if (_activeTasks > 0) then {
-				[_taskID, "FAILED"] call BIS_fnc_taskSetState;
-				_group setVariable ["taskID", ""];
-				_group setVariable ["timeTaskEnded", time];
-			};
-		};
-
-		_chanceData = [_group] call calcSurvivalChance;
-		private _forceDiff = _chanceData select 0;
-		private _friendCount = _chanceData select 1;
-		private _groupsDistance = leader _group distance leader _targetGroup;
-
-		_potentialGroup = [_group] call detectTargetGroup;
-		if (!isNull _potentialGroup) then {
-			_targetGroup = _potentialGroup;
-		};
-
-		if (_forceDiff >= maxForceDiff &&
-		_activeTasks < maxTasksPerUnit &&
-		_groupsDistance < maxGroupDistance &&
-		_groupsDistance >= minGroupDistance &&
-		_friendCount >= minFriendCount &&
-		_lastTaskTime + newTaskCooldown <= time) then {
-			_activeTasks = _activeTasks + 1;
-			_taskID = [_group, _targetGroup] call callCAS;
-			_group setVariable ["taskID", _taskID];
-		};
-
-		if (_activeTasks > 0) then {
-			if (_forceDiff < maxForceDiff) then {
-				_activeTasks = _activeTasks - 1;
-				[_taskID, "SUCCEEDED"] call BIS_fnc_taskSetState;
-				_group setVariable ["taskID", ""];
-				_group setVariable ["timeTaskEnded", time];
-			} else {
-				if (_groupsDistance > maxGroupDistance) then {
-					_activeTasks = _activeTasks - 1;
-					[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
-					_group setVariable ["taskID", ""];
-					_group setVariable ["timeTaskEnded", time];
-				};
-			};
-		};
-
-		sleep 5;
-	};
-};
-
-{
-	private _group = _x;
-
-	if (side _group == side player) then {
-		private _isInfantryGroup = true;
-
-		{
-			if (!(_x isKindOf "Man") || (vehicle _x isKindOf "Air")) exitWith {
-				_isInfantryGroup = false;
-			};
-		} forEach units _group;
-
-		if (!_isInfantryGroup) exitWith {};
-
-		infantryGroups pushBack _group;
-
-		_group addEventHandler ["CombatModeChanged", {
-			private _group = _this select 0;
-			private _newMode = _this select 1;
-
-			if (_newMode isEqualTo "COMBAT") then {
-				private _handle = [_group] spawn casLoop;
-				_group setVariable ["loopHandle", _handle];
-			} else {
-				private _loopHandle = _group getVariable "loopHandle";
-				if (!isNull _loopHandle) then {
-					terminate _loopHandle;
-					_group setVariable ["loopHandle", objNull];
-
-					private _taskID = _group getVariable "taskID";
-					if (!(_taskID isEqualTo "")) then {
-						[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
-						_group setVariable ["timeTaskEnded", time];
-					};
-				};
-			};
-		}];
-	};
-} forEach allGroups;
+CASside = west;
 
 {
 	private _unit = _x;
-	if (side _x == west && vehicle _x isKindOf "Air") then {
+	if (side _x == CASside && vehicle _x isKindOf "Air") then {
 		airVehicles pushBack _unit;
 	};
 } forEach allUnits;
@@ -172,4 +56,59 @@ casLoop = {
 	[_gunner] call setupTaskEvent;
 } forEach airVehicles;
 
-[] call drawOnMap;
+[] call setupArrowDrawing;
+
+handleCombatMode = {
+	params ["_group", "_combatMode"];
+
+	private _loopHandle = _group getVariable ["loopHandle", objNull];
+
+	if (_combatMode isEqualTo "COMBAT" && isNull _loopHandle) then {
+		private _handle = [_group] spawn casLoop;
+		_group setVariable ["loopHandle", _handle];
+	} else {
+		if (!isNull _loopHandle) then {
+			terminate _loopHandle;
+			_group setVariable ["loopHandle", objNull];
+
+			private _taskID = _group getVariable "taskID";
+			if (!(_taskID isEqualTo "")) then {
+				activeGlobalTasks = activeGlobalTasks - 1;
+				[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
+				_group setVariable ["timeTaskEnded", time];
+			};
+		};
+	};
+};
+
+while { true } do {
+	{
+		private _group = _x;
+
+		if (!(_group in infantryGroups) && !isPlayer leader _group) then {
+			if (side _group == CASside) then {
+				private _isInfantryGroup = true;
+
+				{
+					if (_x isKindOf "Air") exitWith {
+						_isInfantryGroup = false;
+					};
+				} forEach units _group;
+
+				if (!_isInfantryGroup) exitWith {};
+
+				infantryGroups pushBack _group;
+
+				[_group, combatMode _group] call handleCombatMode;
+
+				_group addEventHandler ["CombatModeChanged", {
+					params ["_group", "_newMode"];
+
+					[_group, _newMode] call handleCombatMode;
+				}];
+			};
+		};
+	} forEach allGroups;
+
+	sleep ([10, 15] call BIS_fnc_randomInt);
+};

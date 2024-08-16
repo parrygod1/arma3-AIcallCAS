@@ -126,10 +126,35 @@ createCASTask = {
 	_details;
 };
 
+updateCASTaskStatus = {
+	params ["_group", "_taskID", "_status"];
+
+	switch (_status) do {
+		case "SUCCEEDED": {
+			activeGlobalTasks = activeGlobalTasks - 1;
+			[_taskID, "SUCCEEDED"] call BIS_fnc_taskSetState;
+			_group setVariable ["taskID", ""];
+			_group setVariable ["timeTaskEnded", time];
+		};
+		case "CANCELED" : {
+			activeGlobalTasks = activeGlobalTasks - 1;
+			[_taskID, "CANCELED"] call BIS_fnc_taskSetState;
+			_group setVariable ["taskID", ""];
+			_group setVariable ["timeTaskEnded", time];
+		};
+		case "FAILED": {
+			activeGlobalTasks = activeGlobalTasks - 1;
+			[_taskID, "FAILED"] call BIS_fnc_taskSetState;
+			_group setVariable ["taskID", ""];
+			_group setVariable ["timeTaskEnded", time];
+		};
+	};
+};
+
 taskWaypointsMap = createHashMap;
 
 handleCASTasking = {
-	params ["_callerGroup", "_targetGroup", "_pilot"];
+	params ["_callerGroup", "_targetGroup"];
 
 	private _locationName = text nearestLocation [getPos leader _callerGroup, ["NameCity", "NameCityCapital", "NameLocal", "NameMarine", "NameVillage"]];
 	private _taskID = format ["par_CAS_Task_%1", taskIDCounter];
@@ -161,7 +186,6 @@ handleCASTasking = {
 	_details = [_callerGroup, _targetGroup, _waypoints, _munitions, _markers] call createCASTask;
 
 	// [_midPoint, "green"] call createSmoke;
-	// [_waypoints] call drawOnMap;
 
 	taskWaypointsMap set [_taskID, _waypoints];
 
@@ -172,6 +196,24 @@ handleCASTasking = {
 		};
 		[_x, _taskID, [_details, _taskDescription, _taskDescription], _taskDestination, "CREATED", 2, _doNotify] call BIS_fnc_taskCreate;
 	} forEach pilots;
+
+	_taskID;
+};
+
+callCAS = {
+	private _callerGroup = _this select 0;
+	private _targetGroup = _this select 1;
+
+	private _targetPosition = getPos leader _targetGroup;
+	private _midPoint = [getPos leader _callerGroup, _targetPosition] call getMidPoint;
+
+	private _taskID = [_callerGroup, _targetGroup] call handleCASTasking;
+
+	taskIDCounter = taskIDCounter + 1;
+
+	{
+		_x setSuppression 1;
+	} forEach units _callerGroup;
 
 	_taskID;
 };

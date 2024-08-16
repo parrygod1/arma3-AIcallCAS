@@ -32,7 +32,7 @@ createCASMarkers = {
 	[_markerIP, _markerTarget, _markerEgress, _markerFriend];
 };
 
-drawOnMap = {
+setupArrowDrawing = {
 	waitUntil {
 		!isNull findDisplay 12
 	};

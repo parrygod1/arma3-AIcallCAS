@@ -52,7 +52,7 @@ determineMunitions = {
 calcSurvivalChance = {
 	private _group = _this select 0;
 
-	private _targetList = [leader _group nearTargets 500, _group] call getSortedEnemies;
+	private _targetList = [leader _group nearTargets 1000, _group] call getSortedEnemies;
 	private _targetGroup = [];
 
 	{
@@ -172,8 +172,8 @@ calcSurvivalChance = {
 calculateCASWaypoints = {
 	params ["_callerGroup", "_targetPos", "_munitionsType"];
 
-	_friendlyPos = position leader _callerGroup;
-	_enemyPos = _targetPos;
+	private _friendlyPos = position leader _callerGroup;
+	private _enemyPos = _targetPos;
 
 	private _safeDistance = 1000; // Safe distance from friendly forces in meters
 	private _offsetDistance = 500; // distance offset for IP and egress points
@@ -184,7 +184,6 @@ calculateCASWaypoints = {
 
 	// Normalize the attack vector (direction)
 	private _attackDirection = vectorNormalized _attackVector;
-
 	// Determine the Initial Point (IP) based on the munitions type
 	private _ipDistance = switch (_munitionsType) do {
 		case "Gun": {
@@ -201,32 +200,35 @@ calculateCASWaypoints = {
 		};
 	};
 
+	private _rotatedVector = [];
+	private _egressDirection = [];
+
 	// If it's a gun run, make the approach perpendicular to the attack vector
-	_ipPos = [];
+	private _ipPos = [];
 	if (_munitionsType == "Gun") then {
-		_perpendicularVector = [_attackDirection select 1, - (_attackDirection select 0), 0];
-		_ipPos = _enemyPos vectorAdd (_perpendicularVector vectorMultiply _ipDistance);
+		private _perpendicularVector = [_attackDirection select 1, -(_attackDirection select 0), 0];
+		_ipPos = _enemyPos vectorAdd (_perpendicularVector vectorMultiply _ipDistance)
 	} else {
-		_ipPos = _enemyPos vectorAdd (_attackDirection vectorMultiply _ipDistance);
+		_ipPos = _enemyPos vectorAdd (_attackDirection vectorMultiply _ipDistance)
 	};
 
 	// Calculate the egress position
-	_egressPos = [];
+	private _egressPos = [];
 	if (_munitionsType == "Gun") then {
 		// for a gun run, egress should also avoid flying over enemy lines
-		private _egressDirection = [_attackDirection select 1, -(_attackDirection select 0), 0];
+		_egressDirection = _attackDirection;
 		_egressPos = _enemyPos vectorAdd (_egressDirection vectorMultiply _offsetDistance);
 	} else {
 		// for other munitions, offset egress direction by a certain angle to avoid overflying enemy
 		private _egressAngle = _egressAngleOffset * (pi / 180); // Convert degrees to radians
 		private _cosTheta = cos _egressAngle;
 		private _sinTheta = sin _egressAngle;
-		private _rotatedVector = [
+		_egressDirection = [
 			(_attackDirection select 0) * _cosTheta - (_attackDirection select 1) * _sinTheta,
 			(_attackDirection select 0) * _sinTheta + (_attackDirection select 1) * _cosTheta,
 			0
 		];
-		_egressPos = _enemyPos vectorAdd (_rotatedVector vectorMultiply _offsetDistance);
+		_egressPos = _enemyPos vectorAdd (_egressDirection vectorMultiply _offsetDistance);
 	};
 
 	// Ensure IP and Egress points are not too close to friendly forces
@@ -234,7 +236,7 @@ calculateCASWaypoints = {
 		_ipPos = _friendlyPos vectorAdd (_attackDirection vectorMultiply _safeDistance);
 	};
 	if (_egressPos distance _friendlyPos < _safeDistance) then {
-		_egressPos = _friendlyPos vectorAdd (_attackDirection vectorMultiply (-_safeDistance));
+		_egressPos = _friendlyPos vectorAdd (_egressDirection vectorMultiply (-_safeDistance));
 	};
 
 	// Return the waypoints
@@ -262,7 +264,7 @@ getSortedEnemies = {
 detectTargetGroup = {
 	params ["_group"];
 
-	_targetList = leader _group nearTargets 500;
+	_targetList = leader _group nearTargets 1000;
 	_targetGroup = objNull;
 
 	_sortedList = [_targetList, _group] call getSortedEnemies;
