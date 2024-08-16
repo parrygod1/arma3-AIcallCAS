@@ -13,6 +13,9 @@ taskIDCounter = 0;
 maxGlobalTasks = 3;
 activeGlobalTasks = 0;
 
+// min distance between tasks to allow creation of a new one
+minTaskDistance = 500;
+
 maxTasksPerUnit = 1;
 
 // Percentage over which CAS will be called for a group
@@ -34,6 +37,8 @@ dangerCloseDistance = 200;
 minFriendCount = 2;
 
 CASside = west;
+
+taskWaypointsMap = createHashMap;
 
 {
 	private _unit = _x;

@@ -30,14 +30,10 @@ casLoop = {
 				private _friendCount = _chanceData select 1;
 				private _groupsDistance = leader _group distance leader _targetGroup;
 
-				if (_activeTasks < maxTasksPerUnit &&
-				_forceDiff >= maxForceDiff &&
-				_groupsDistance < maxGroupDistance &&
-				_groupsDistance >= minGroupDistance &&
-				_friendCount >= minFriendCount &&
-				_lastTaskTime + newGroupTaskCooldown <= time) then {
+				private _canCallCAS = [_targetGroup, _activeTasks, _forceDiff, _groupsDistance, _friendCount, _lastTaskTime] call getCanCallCAS;
+
+				if (_canCallCAS) then {
 					_activeTasks = _activeTasks + 1;
-					activeGlobalTasks = activeGlobalTasks + 1;
 					_taskID = [_group, _targetGroup] call callCAS;
 					_group setVariable ["taskID", _taskID];
 				};

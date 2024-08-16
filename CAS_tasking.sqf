@@ -129,6 +129,8 @@ createCASTask = {
 updateCASTaskStatus = {
 	params ["_group", "_taskID", "_status"];
 
+	taskWaypointsMap deleteAt _taskID;
+
 	switch (_status) do {
 		case "SUCCEEDED": {
 			activeGlobalTasks = activeGlobalTasks - 1;
@@ -151,7 +153,33 @@ updateCASTaskStatus = {
 	};
 };
 
-taskWaypointsMap = createHashMap;
+getCanCallCAS = {
+	params [
+		"_targetGroup",
+		"_activeTasks",
+		"_forceDiff",
+		"_groupsDistance",
+		"_friendCount",
+		"_lastTaskTime"
+	];
+
+	_distanceOK = true;
+	{
+		private _targetWP = _y select 1;
+
+		if (leader _targetGroup distance2D _targetWP < minTaskDistance) then {
+			_distanceOK = false;
+		}
+	} forEach taskWaypointsMap;
+
+	_distanceOK &&
+	(_activeTasks < maxTasksPerUnit) &&
+	(_forceDiff >= maxForceDiff) &&
+	(_groupsDistance < maxGroupDistance) &&
+	(_groupsDistance >= minGroupDistance) &&
+	(_friendCount >= minFriendCount) &&
+	(_lastTaskTime + newGroupTaskCooldown <= time)
+};
 
 handleCASTasking = {
 	params ["_callerGroup", "_targetGroup"];
@@ -210,6 +238,7 @@ callCAS = {
 	private _taskID = [_callerGroup, _targetGroup] call handleCASTasking;
 
 	taskIDCounter = taskIDCounter + 1;
+	activeGlobalTasks = activeGlobalTasks + 1;
 
 	{
 		_x setSuppression 1;
