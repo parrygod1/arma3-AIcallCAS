@@ -1,4 +1,4 @@
-An unfinished concept that makes the AI call in CAS from player pilots via tasking. 
+An unfinished concept that makes the AI call in CAS from player pilots via tasking. Works automatically on any editor placed or spawned AI infantry group.
 
 Features
   - Task handling
